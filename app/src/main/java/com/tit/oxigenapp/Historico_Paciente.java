@@ -9,16 +9,13 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.firebase.ui.firestore.FirestoreRecyclerAdapter;
 import com.firebase.ui.firestore.FirestoreRecyclerOptions;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
@@ -29,15 +26,13 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.firestore.DocumentReference;
-import com.google.firebase.firestore.DocumentSnapshot;
-import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -49,12 +44,12 @@ public class Historico_Paciente extends AppCompatActivity {
     FirebaseAuth fAuth;
     private String idUser;
     RecyclerView recyclerViewHisorico;
-    historicoAdapter mAdapter;
-    FirebaseFirestore mFirestore;
-    private int nYear, nMonth, nDay,sYear,sMonth, sDay;
-    static final int DATE_ID = 0;
+    historicoAdapter mAdapter,m2Adapter;
+    FirebaseFirestore mFirestore,m2Firestore;
+    private int nYear, nMonth, nDay,sYear,sMonth, sDay, n2Year, n2Month, n2Day;
+    static final int DATE_ID = 0,DATE_ID2=1;
     Calendar C= Calendar.getInstance();
-    EditText t1;
+    EditText t1,t2;
     int validacion;
 
     @Override
@@ -72,12 +67,15 @@ public class Historico_Paciente extends AppCompatActivity {
         recyclerViewHisorico= findViewById(R.id.recyclerHistorico);
         recyclerViewHisorico.setLayoutManager(new LinearLayoutManager(this ));
         mFirestore = FirebaseFirestore.getInstance();
+        m2Firestore = FirebaseFirestore.getInstance();
         Date fecha = C.getTime();
-        Log.d( "Paciente",C.getTime().toString());
-        Query query = mFirestore.collection("Usuarios").document(idUser).collection("spo2");
-        
+
+        Query query = mFirestore.collection("Usuarios").document(idUser).collection("spo2").orderBy("fecha", Query.Direction.DESCENDING);
+        //Log.d( "Paciente",fecha.toString());
+
        FirestoreRecyclerOptions<historico> firestoreRecyclerOptions = new FirestoreRecyclerOptions.Builder<historico>().setQuery(query, historico.class).build();
         mAdapter = new historicoAdapter(firestoreRecyclerOptions);
+        Log.d( "Datos",mAdapter.toString());
         mAdapter.notifyDataSetChanged();
         recyclerViewHisorico.setAdapter(mAdapter);
 
@@ -87,7 +85,7 @@ public class Historico_Paciente extends AppCompatActivity {
         sYear=C.get(Calendar.YEAR);
         buscarFecha=findViewById(R.id.ButtonBuscarFechaHistorico);
         t1= (EditText)findViewById(R.id.editTextFechaHistorico);
-        t1.setText(sMonth + "-" + sDay  + "-" + sYear);
+        t1.setText(sDay + "/" + sMonth  + "/" + sYear);
         t1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -97,6 +95,18 @@ public class Historico_Paciente extends AppCompatActivity {
                 validacion=1;
             }
         });
+        t2= (EditText)findViewById(R.id.editTextFechaHistorico2);
+        t2.setText(sDay + "/" + sMonth  + "/" + sYear);
+        t2.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                showDialog(DATE_ID2);
+
+                validacion=1;
+            }
+        });
+
 
 
 
@@ -111,18 +121,72 @@ public class Historico_Paciente extends AppCompatActivity {
                 startActivity(new Intent(getApplicationContext(),Patient.class));
             }
         });
+
+
+
+        buscarFecha.setOnClickListener(new View.OnClickListener() {
+            @Override
+
+            public void onClick(View v) {
+                if (validacion == 1) {
+                    SimpleDateFormat formato = new SimpleDateFormat("dd/MM/yyyy");
+                    try {
+
+                        Date desde=formato.parse(t1.getText().toString());
+                        Date hasta=formato.parse(t2.getText().toString());
+
+                        if(hasta.after(desde)) {
+                            Log.d("Desde", desde.toString());
+                            Log.d("Hasta", hasta.toString());
+
+
+                            m2Firestore = FirebaseFirestore.getInstance();
+
+                            Query query = m2Firestore.collection("Usuarios").document(idUser).collection("spo2").whereLessThan("fecha", hasta).whereGreaterThan("fecha", desde).orderBy("fecha", Query.Direction.DESCENDING);
+
+                            // String dia = new SimpleDateFormat("dd").format(subject.getTime());
+                            FirestoreRecyclerOptions<historico> firestoreRecyclerOptions = new FirestoreRecyclerOptions.Builder<historico>().setQuery(query, historico.class).build();
+                            m2Adapter = new historicoAdapter(firestoreRecyclerOptions);
+                            m2Adapter.notifyDataSetChanged();
+                            recyclerViewHisorico.setAdapter(m2Adapter);
+                            if (validacion == 1) {
+                                m2Adapter.startListening();
+                            }
+                        }
+                        else {
+                            Toast.makeText(Historico_Paciente.this,"Ingrese datos correctos",Toast.LENGTH_SHORT).show();
+                        }
+
+                    } catch (ParseException e) {
+                        e.printStackTrace();
+                    }
+
+
+                }
+            }
+        });
+
+
+
+
+
+
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         mAdapter.startListening();
+
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         mAdapter.stopListening();
+        if(validacion==1){
+            m2Adapter.stopListening();
+        }
     }
 
 
@@ -132,7 +196,12 @@ public class Historico_Paciente extends AppCompatActivity {
 
 
     private void colocar_fecha() {
-        t1.setText((nMonth +1   ) + "-" + nDay + "-" + nYear);
+        t1.setText((nDay    ) + "/" +(nMonth+1)  + "/" + nYear);
+
+    }
+
+    private void colocar_fecha2() {
+        t2.setText(( n2Day  ) + "/" + (n2Month +1) + "/" + n2Year);
 
     }
     private DatePickerDialog.OnDateSetListener mDateSetListener =
@@ -147,12 +216,26 @@ public class Historico_Paciente extends AppCompatActivity {
                 }
 
             };
+    private DatePickerDialog.OnDateSetListener mDateSetListener2 =
+            new DatePickerDialog.OnDateSetListener() {
+                public void onDateSet(DatePicker view, int year, int monthOfYear, int dayOfMonth) {
+
+                    n2Year = year;
+                    n2Month = monthOfYear;
+                    n2Day = dayOfMonth;
+                    colocar_fecha2();
+
+                }
+
+            };
 
     @Override
     protected Dialog onCreateDialog(int id) {
         switch (id) {
-            case DATE_ID:
+            case 0:
                 return new DatePickerDialog(this, mDateSetListener, sYear, sMonth-1, sDay);
+            case 1:
+                return new DatePickerDialog(this, mDateSetListener2, sYear, sMonth-1, sDay);
 
 
         }
@@ -160,5 +243,6 @@ public class Historico_Paciente extends AppCompatActivity {
 
         return null;
     }
+
 
 }
